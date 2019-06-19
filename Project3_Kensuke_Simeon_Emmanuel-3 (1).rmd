@@ -1,0 +1,493 @@
+---
+title: "Applied Econometrics (ECON 403B) - Project vol.3"
+author:
+- Kensuke Fukunaga^[kensuke.fukunaga0503@gmail.com]
+- Simeon Wilson^[simeonwilson@g.ucla.edu]
+- Emmanuel Brisset^[emmanuelbrisset@g.ucla.edu]
+date: "`r format(Sys.time(), '%m/%d/%Y')`"
+tags: [nothing, nothingness]
+
+fontfamily: mathpazo
+header-includes:
+   - \usepackage{ascmac}
+   - \usepackage[utf8]{inputenc}
+   - \usepackage{lscape}
+   - \usepackage{chngcntr}
+output: 
+  pdf_document:
+    latex_engine: pdflatex
+    df_print: kable
+  fig_caption: yes
+  highlight: haddock
+  toc: true
+  number_sections: true
+  df_print: paged
+fontsize: 10.5pt
+editor_options:
+chunk_output_type: console
+---
+
+```{r include=FALSE}
+# Clearring Prior variables and sessions
+rm(list=ls(all=TRUE))
+#setwd("C:/R/R-3.5.1/")
+
+# Loading Libraries
+## Basic Library
+library(knitr) #A General-Purpose Package for Dynamic Report Generation in R
+library(base) #Base R functions
+library(XML) #Tools for Parsing and Generating XML Within R and S-Plus 
+library(RCurl) #General Network (HTTP/FTP/...) Client Interface for R
+
+## Download the data
+library(readr) #Read Rectangular Text Data
+library(readxl) #Read Excel Files
+library(foreign) #Read Data Stored by 'Minitab', 'S', 'SAS', 'SPSS', 'Stata', 'Systat', 'Weka', 'dBase', ... 
+library(quantmod) #Quantitative Financial Modelling Framework
+library(Quandl) #API Wrapper for Quandl.com 
+require("datasets")
+
+## Handle the data
+library(dplyr) #A Grammar of Data Manipulation
+library(summarytools) #Tools to Quickly and Neatly Summarize Data
+library(plyr) #Tools for Splitting, Applying and Combining Data
+library(reshape2) #Flexibly Reshape Data: A Reboot of the Reshape Package 
+library(RJSONIO) #Serialize R Objects to JSON, JavaScript Object Notation
+library(outliers) #Tests for outliers
+
+## Create the graph
+library(ggplot2) #Create Elegant Data Visualisations Using the Grammar of Graphics
+library(DAAG) #Data Analysis and Graphics Data and Functions
+library(fitdistrplus) #Help to Fit of a Parametric Distribution to Non-Censored or Censored Data
+library(goft) #Tests of Fit for some Probability Distributions
+library(corrplot) #Visualization of a Correlation Matrix 
+library(latex2exp) #Use LaTeX Expressions in Plots
+
+## Do analysis
+#library(PoEdata) #PoE data for R
+library(erer) #Empirical Research in Economics with R
+library(AER) #Applied Econometrics with R
+library(broom) #Convert Statistical Analysis Objects into Tidy Tibbles
+library(car) #Companion to Applied Regression
+library(stargazer) #Well-Formatted Regression and Summary Statistics Tables
+library(effects) #Effect Displays for Linear, Generalized Linear, and Other Models
+library(multcomp) #Simultaneous Inference in General Parametric Models 
+library(simpleboot) #Simple Bootstrap Routines
+library(MCMCpack) #Markov Chain Monte Carlo (MCMC) Package 
+library(tseries) #Time Series Analysis and Computational Finance
+library(forecast) #Forecasting Functions for Time Series and Linear Models 
+library(xts) #eXtensible Time Series
+library(pastecs) #Package for Analysis of Space-Time Ecological Series
+library(psych) #Procedures for Psychological, Psychometric, and Personality Research
+library(margins) #Marginal Effects for Model Objects 
+
+## Math Library
+library(distrEx) #Extensions of Package 'distr' 
+library(prob) #Elementary Probability on Finite Sample Spaces 
+library(combinat) #combinatorics utilities
+library(fAsianOptions) #Rmetrics - EBM and Asian Option Valuation 
+library(MASS) #Support Functions and Datasets for Venables and Ripley's MASS 
+require(financeR)
+library(Metrics)
+
+## Unknown
+library(stats)
+library(TSA)
+library(timeSeries)
+library(fUnitRoots)
+library(fBasics)
+library(timsac)
+library(TTR)
+library(fpp)
+library(qcc)
+library(vars)
+library(foreach)
+
+opts_chunk$set(echo=TRUE, cache=TRUE, message=FALSE, warning=FALSE)
+opts_chunk$set(tidy.opts=list(width.cutoff=60))
+options(width = 1000)
+
+Print <- function(...){
+ key <- as.list(substitute(list(...)))[-1L]
+ val <- list(...)
+ mapply(
+  function(k, v){
+   cat(k, "= ")
+   if(!is.matrix(v) && (is.logical(v) || is.numeric(v) || is.complex(v) || is.character(v))){ cat(v, "\n") }
+   else{ cat("\n"); print(v); cat("\n") }
+  },  
+  key, val)
+ cat("\n")
+}
+```
+
+###I. Airline Data
+
+###(a) Download and Check the Data
+
+```{r}
+##Download the data
+data("USAirlines")
+usair <- data.frame(USAirlines)
+
+##Check missing observations across variables
+stat_function <- function(x){
+    if(class(x)=="integer"|class(x)=="numeric"){
+        var_type = class(x)
+        length = length(x)
+        miss_val = sum(is.na(x))
+        mean = mean(x,na.rm = T)
+        std = sd(x,na.rm = T)
+        var = var(x,na.rm = T)
+        cv = std/mean
+        min = min(x)
+        max = max(x,na.rm = T)
+        pct = quantile(x,na.rm = T,p=c(0.75,0.85,0.90,0.95,0.99,1.0))
+        return(c(var_type=var_type,length=length,miss_val=miss_val,
+                 mean=round(mean,0),std=round(std,0),min=min,max=max))
+        }
+}
+
+num_var <- names(usair)[sapply(usair,is.numeric)]
+cat_var <- names(usair)[!sapply(usair,is.numeric)]
+mystat <- apply(usair[num_var],2,stat_function)
+t(mystat)
+```
+We have 6 firms with complete sets of observations 
+
+
+
+###(b) Examine the Summary Statistics
+
+```{r}
+summary(usair)
+```
+Of the summary statistics, the ones that we found to be most noteworthy are as follows. First we see that airlines never utilize more than 70% of their capacity during a given year, while this may be a part of the airline business that is unavoidable, it still shows that there is room for increased efficency as far as utilizing capacity. Also, we see that from 1970 to 1984 the price of fule has fluctuated by a factor of 10, which is by any account, extremely volatile. For output and cost we see a large variation, but considering that our summary stats do not dicriminate based on airlines, this variation is likely due to different firms having different outputs and costs. 
+
+
+###(c) Estimate the Pooled OLS
+
+```{r}
+
+library(plm)
+##Convert usair into the panel data 
+idx <- c("firm", "year")
+pdata <- pdata.frame(usair, index = idx, drop.index = TRUE, row.names = TRUE)
+
+##Estimate the Pooled OLS
+log_output2 <- (log(usair$output))^2
+panel_pooled <- plm(log(cost) ~ log(output)+ log_output2 + log(price) + load , 
+                     data=pdata , index=idx, model="pooling") 
+summary(panel_pooled)
+```
+
+###(d) Re-estimate the Each Fixed Effect Model
+
+```{r}
+##Estimate the Fixed Effect Model on Time
+panel_t <- plm(log(cost) ~ log(output)+ log_output2 + log(price) + load ,
+                data=pdata , index=idx, effect="time", model="within") 
+summary(panel_t)
+
+##Estimate the Fixed Effect Model on Firm
+panel_i <- plm(log(cost) ~ log(output)+ log_output2 + log(price) + load ,
+                data=pdata , index=idx, effect="individual", model="within") 
+summary(panel_i)
+
+##Estimate the Fixed Effect Model on both Time and Firm
+panel_it <- plm(log(cost) ~ log(output)+ log_output2 + log(price) + load ,
+                data=pdata , index=idx, effect="twoway", model="within") 
+summary(panel_it)
+```
+
+We can see that in every regression, no matter what type of effects we use, we never see any switching of the signs that are statistically signifigant. However, we do see a lot of changing in statistical signifigance. We notice that controlling for firm effect and time effects greatly changes the statistical signifigance of our coefficients. Most noteably, we see that in a regression where we control for nothing, every coefficient is signifigant. However, when we control for time and firm effects, we see that the only two variables that are related to cost are load, and output.
+
+
+
+###(e) Compare the estimated time effects
+
+```{r}
+##Estimate the Fixed Effect Model on Time
+summary(fixef(panel_t))
+plot( usair$year[1:15] ,fixef(panel_t), main = "estimated yearly effects")
+
+##Estimate the Fixed Effect Model on both Time and Firm
+summary(fixef(panel_it))
+```
+
+We notice that with time effects, there seems to be a jump in how important the effects of time are after 1973, and seems to level out after 1981. 
+
+
+
+###(f) Re-estimate the Random Effect Model
+
+```{r}
+##Estimate the Random Effect Model on Time
+panel_t_r <- plm(log(cost) ~ log(output)+ log_output2 + log(price) + load ,
+                data=pdata , index=idx, effect="time", model="random") 
+summary(panel_t_r)
+
+##Estimate the Random Effect Model on Firm
+panel_i_r <- plm(log(cost) ~ log(output)+ log_output2 + log(price) + load ,
+                data=pdata , index=idx, effect="individual", model="random") 
+summary(panel_i_r)
+
+##Estimate the Random Effect Model on both Time and Firm
+panel_it_r <- plm(log(cost) ~ log(output)+ log_output2 + log(price) + load ,
+                data=pdata , index=idx, effect="twoway", model="random") 
+summary(panel_it_r)
+```
+
+###(g)Hausman Test
+
+```{r}
+##Hausman Test on Time
+phtest( panel_t_r,panel_t)
+
+##Hausman Test on Firm
+phtest(panel_i, panel_i_r)
+
+##Hausman Test on both Time and Firm
+phtest(panel_it, panel_it_r)
+```
+Our tests indicate that the random effects model is in fact the better model to be using when we compare it to any of our other types of fixed effects. 
+
+
+\clearpage
+
+###II. Wage Equation
+
+###(a) Download the Data and Fit a regular OLS model
+
+```{r}
+##Download the data
+rawdata <- read_csv('wage.csv')
+wagedata <- plm.data(rawdata,595)
+
+##Fit a regular OLS model
+ols_wage <- lm(LWAGE ~ EXPER+WKS+OCC+IND+SOUTH+SMSA+MS+FEM+UNION+ED+BLK,
+               data=wagedata)
+summary(ols_wage)
+
+##Detect Heteroskedasticity
+##Breusch-Pagan Test
+ncvTest(ols_wage)
+##White Test
+bptest(ols_wage)
+```
+Yes, both tests confirm that we do have heteroskedasticity. 
+
+
+###(b) Compare the White Standard Errors with the Robust Panel Standard Errors
+
+```{r}
+##Calculate the White Standard Errors
+library(robustbase)
+ols_wage_white <- lmrob(LWAGE ~ EXPER+WKS+OCC+IND+SOUTH+SMSA+MS+FEM+UNION+ED+BLK,
+               data=wagedata)
+summary(ols_wage_white)
+```
+
+
+
+```{r}
+##Calculate the Robust Panel Standard Errors
+##Convert usair into the panel data 
+idx <- c("id", "time")
+pdata <- pdata.frame(wagedata, index = idx, drop.index = TRUE, row.names = TRUE)
+
+##Estimate the Pooled OLS
+panel_pooled <- plm(LWAGE ~ EXPER+WKS+OCC+IND+SOUTH+SMSA+MS+FEM+UNION+ED+BLK , 
+                     data=pdata , index=idx, model="pooling") 
+summary(panel_pooled)
+#coeftest(panel_pooled,vcov=vcovHC(panel_pooled, type="HC0", #cluster="group"))
+```
+When comparing our white standard errors to the robust panel standard errors, we see that the robust panel standard erros are smaller in every case. This means that the heteroskedasticity that we saw can be better corrected by including fixed effects than by using a more general method like white standard erros. This makes sense because we think that a non constant variance could certainly be due to something like time or individual effects.
+
+
+
+###(c) Fitting models with individual effects and time + individual fixed effects 
+
+```{r}
+##Estimate the Fixed Effect Model on ID
+panel_i <- plm(LWAGE ~ EXPER+WKS+OCC+IND+SOUTH+SMSA+MS+FEM+UNION+ED+BLK,
+                data=pdata , index=idx, effect="individual", model="within") 
+summary(panel_i)
+coeftest(panel_i,vcov=vcovHC(panel_i, type="HC0", cluster="group"))
+
+##Estimate the Fixed Effect Model on both ID and TIME
+panel_it <- plm(LWAGE ~ EXPER+WKS+OCC+IND+SOUTH+SMSA+MS+FEM+UNION+ED+BLK,
+                data=pdata , index=idx, effect="twoway", model="within") 
+summary(panel_it)
+coeftest(panel_it,vcov=vcovHC(panel_it, type="HC0", cluster="group"))
+
+plot(fixef(panel_it), ylim = c(1,10), col = "green", pch = 2,main="estimated individual effects, with and without time", lwd = 2)
+points(fixef(panel_i), col = "red", pch = 3)
+legend("topleft", inset = .01,legend = c("time+id", "id only"), col = c("green", "red"), pch = c(2,3))
+
+
+```
+We can see that for our fixed effects become larger, and much more precise when we add in our time effects. 
+
+
+
+
+
+###(d) Estimate the Random Effect Model and Do Hausman Test
+
+```{r}
+##Estimate the Random Effect Model on ID
+panel_i_r <- plm(LWAGE ~ EXPER+WKS+OCC+IND+SOUTH+SMSA+MS+FEM+UNION+ED+BLK,
+                data=pdata , index=idx, effect="individual", model="random") 
+summary(panel_i_r)
+
+##Estimate the Random Effect Model on both ID and TIME
+panel_it_r <- plm(LWAGE ~ EXPER+WKS+FEM+IND+BLK+ED,
+                data=pdata , index=idx, effect="twoway", model="random") 
+summary(panel_it_r)
+
+##Hausman Test on ID
+phtest(panel_i, panel_i_r)
+
+##Hausman Test on both ID and TIME
+phtest(panel_it, panel_it_r)
+```
+We can see that from our hausman test that the fixed effects model is better than the random effects model when we do not include time effects. However, when we do include time effects then random effects is the better model. 
+
+\clearpage
+
+###III. US Consumption
+
+###(a) Download the Data and Calculate the Investment
+
+```{r}
+##Download the data
+data("USConsump1993")
+uscons <- data.frame(USConsump1993)
+
+##Calculate the investment
+investment <- uscons$income - uscons$expenditure
+uscons$investment <- investment
+print(uscons)
+```
+
+###(b) Calculate the Summary Statistics and Estimate the Underlying Distributions
+
+```{r}
+##Summary of the income
+summary(uscons$income)
+
+##Summary of the expenditure
+summary(uscons$expenditure)
+
+##Summary of the investment
+summary(uscons$investment)
+
+##Cullen Frey Graph of the income
+descdist(uscons$income, discrete = FALSE, boot = 1000) 
+
+##Fit the distribution of the income
+fn <- fitdist(uscons$income, "norm")
+fu <- fitdist(uscons$income, "unif")
+plot.legend <- c("normal", "uniform")
+denscomp(list(fn, fu), main=TeX("Histogram of the income"),
+xlab=TeX("$\\mathit{income}$"),
+ylab=TeX("$\\mathit{P(income)}$"),legendtext = plot.legend)
+
+##Cullen Frey Graph of the expenditure
+descdist(uscons$expenditure, discrete = FALSE, boot = 1000) 
+
+##Fit the distribution of the expenditure
+fn <- fitdist(uscons$expenditure, "norm")
+fu <- fitdist(uscons$expenditure, "unif")
+plot.legend <- c("normal", "uniform")
+denscomp(list(fn, fu), main=TeX("Histogram of the expenditure"),
+xlab=TeX("$\\mathit{expenditure}$"),
+ylab=TeX("$\\mathit{P(expenditure)}$"),legendtext = plot.legend)
+
+##Cullen Frey Graph of the investment
+descdist(uscons$investment, discrete = FALSE, boot = 1000) 
+
+##Fit the distribution of the investment
+fn <- fitdist(uscons$investment, "norm")
+fu <- fitdist(uscons$investment, "unif")
+plot.legend <- c("normal", "uniform")
+denscomp(list(fn, fu), main=TeX("Histogram of the investment"),
+xlab=TeX("$\\mathit{investment}$"),
+ylab=TeX("$\\mathit{P(investment}$"),legendtext = plot.legend)
+```
+We can see that for income, expenditure, and investment, it is very difficult to fit a distribution. while there isnt any one distribution that is a perfect fit, our Cullen Frey and histograms strongly suggest that all three distributions are uniform. So, while we know that uniform is not perfect, it is the distribution that we choose for income, expenditure, and investment. 
+
+###(c) Regress income on expenditure using a regular OLS model
+
+```{r}
+##Regress income on expenditure using a regular OLS model
+summary(lm(uscons$income ~ uscons$expenditure))
+```
+
+###(d) Calculate a Two Stage Least Squares Regression
+
+```{r}
+##Calculate a two stage least squares regression,
+##using investment as an instrumental variable
+summary(ivreg(income ~ expenditure | expenditure + investment, data = uscons))
+
+library(sem)
+summary(tsls(income ~ expenditure, ~ expenditure + investment, data = uscons)) 
+```
+Including the instrumental variable of investiment has virtually no effect. The coefficient does not change and neither does the statistical signifigance. 
+\clearpage
+
+###IV. Women?fs Education
+
+###(a) Regress fertility on education using a regular OLS model
+
+```{r}
+##Download the data
+rawdata <- read.table('fertil1.raw')
+womandata <- data.frame(rawdata)
+colnames(womandata) <- c("year","educ","meduc","feduc","age","kids","black","east",     
+                         "northcen","west","farm","othrural","town","smcity","y74",
+                         "y76","y78","y80","y82","y84","agesq","y74educ","y76educ",
+                         "y78educ","y80educ","y82educ","y84educ")
+summary(womandata)
+attach(womandata)
+
+##Regress fertility on education using a regular OLS model
+summary(lm(kids ~ educ + age + black + east + northcen + west 
+           + farm + othrural + town + smcity 
+           + y74 + y76 + y78 + y80 + y82 + y84 + agesq))
+```
+We see that the more education a woman has, the less likely she is to have children, this result is signifigant at the 99.99% level. Specifically, roughly, for every additional 8 years of education, a woman will have 1 less kid. we also see that the effects of year become negative and signifigant for 1982, and 1984. On average, these women have on average about .5 less kids.
+
+
+###(b) Calculate a Two Stage Least Squares Regression
+
+```{r}
+##Calculate a two stage least squares regression, using mothereduc and fatheduc as instrumental variables
+
+reg_iv1 <- ivreg(formula = kids~educ+ age + black + east + northcen + west 
+           + farm + othrural + town + smcity 
+           + y74 + y76 + y78 + y80 + y82 + y84 + agesq | . - educ+ meduc + feduc)
+
+summary(reg_iv1)
+
+cor(educ, meduc+feduc)
+cor(educ, meduc)
+cor(educ, feduc)
+
+
+```
+
+###(c) Include interaction terms
+
+```{r}
+##Calculate a two stage least squares regression with interaction terms
+reg_iv_inter<- ivreg(formula = kids ~ educ + age + black + east + northcen + west 
+           + farm + othrural + town + smcity 
+           + y74 + y76 + y78 + y80 + y82 + y84 + agesq 
+           + y74educ + y76educ + y78educ + y80educ + y82educ + y84educ
+           | . - educ + meduc + feduc, data = womandata) 
+
+summary(reg_iv_inter)
+```
